@@ -1354,6 +1354,19 @@ int wait_for_authbusy(struct target *target, uint32_t *dmstatus)
 
 static void deinit_target(struct target *target)
 {
+	/* Release SETRESETHALTREQ to make the target system runs freely */
+	int hartid = riscv_current_hartid(target);
+	uint32_t dmcontrol = 0;
+	dmcontrol = set_hartsel(dmcontrol, hartid);
+	dmcontrol |= DMI_DMCONTROL_CLRRESETHALTREQ;
+	dmcontrol |= DMI_DMCONTROL_DMACTIVE;
+	dmcontrol |= DMI_DMCONTROL_RESUMEREQ;
+	if(dmi_write(target, DMI_DMCONTROL, dmcontrol) != ERROR_OK)
+	{
+		LOG_USER("Unfreeze risc-v target failed!");
+	}
+	dmi_write(target, DMI_DMCONTROL, 0);
+
 	LOG_DEBUG("riscv_deinit_target()");
 	riscv_info_t *info = (riscv_info_t *) target->arch_info;
 	free(info->version_specific);
