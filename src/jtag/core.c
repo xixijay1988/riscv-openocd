@@ -1074,6 +1074,9 @@ static int jtag_examine_chain(void)
 	for (unsigned i = 0; i < max_taps; i++) {
 		assert(bit_count < max_taps * 32);
 		uint32_t idcode = buf_get_u32(idcode_buffer, bit_count, 32);
+		
+		if(idcode == 0x1000563d) /* correct bumblebee processor idcode */
+			idcode = 0x1e200a6d;
 
 		/* No predefined TAP? Auto-probe. */
 		if (tap == NULL) {

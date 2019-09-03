@@ -2966,6 +2966,10 @@ static bool riscv013_is_halted(struct target *target)
 	if (get_field(dmstatus, DMI_DMSTATUS_ANYHAVERESET)) {
 		int hartid = riscv_current_hartid(target);
 		LOG_INFO("Hart %d unexpectedly reset!", hartid);
+		LOG_INFO("In debug mode, Please don't reset target by reset key");
+		LOG_INFO("To reset target, please click 'restart' button on Eclipse IDE.");
+		LOG_INFO("Otherwise the breakpoint will be all lose!!");
+		LOG_INFO("Now, please click pause button, and restart again to re-control the target.");
 		/* TODO: Can we make this more obvious to eg. a gdb user? */
 		uint32_t dmcontrol = DMI_DMCONTROL_DMACTIVE |
 			DMI_DMCONTROL_ACKHAVERESET;
