@@ -137,6 +137,7 @@ struct fespi_target {
 static const struct fespi_target target_devices[] = {
 	/* name,   tap_idcode, ctrl_base */
 	{ "Freedom E300 SPI Flash",  0x10e31913 , 0x10014000 },
+#if 0
 	{ "Nuclei E203 SPI Flash",	0x1e200a6d,	0x10014000},
 	{ "Nuclei N201 SPI Flash",	0x12010a6d,	0x10014000},
 	{ "Nuclei N203 SPI Flash",	0x12030a6d,	0x10014000},
@@ -144,6 +145,9 @@ static const struct fespi_target target_devices[] = {
 	{ "Nuclei N205f SPI Flash",	0x1205fa6d,	0x10014000},
 	{ "Nuclei N207 SPI Flash",	0x12070a6d,	0x10014000},
 	{ "Nuclei N207f SPI Flash",	0x1207fa6d,	0x10014000},
+#else
+	{ "Nuclei SoC SPI Flash", 0x00000a6d, 0x10014000},
+#endif
 	{ NULL,    0,           0          }
 };
 
@@ -928,14 +932,28 @@ static int fespi_probe(struct flash_bank *bank)
 	fespi_info->probed = 0;
 
 	if (fespi_info->ctrl_base == 0) {
-		for (target_device = target_devices ; target_device->name ; ++target_device)
-			if (target_device->tap_idcode == target->tap->idcode)
-				break;
+
+		if ((target->tap->idcode & 0x00000fff) == 0xa6d)
+			for (target_device = target_devices ; target_device->name ; ++target_device)
+			{
+				if (target_device->tap_idcode == 0xa6d)
+					break;
+			}
+		else
+			for (target_device = target_devices ; target_device->name ; ++target_device)
+			{
+				if (target_device->tap_idcode == target->tap->idcode)
+					break;
+			}
 
 		if (!target_device->name) {
 			LOG_ERROR("Device ID 0x%" PRIx32 " is not known as FESPI capable",
 					target->tap->idcode);
 			return ERROR_FAIL;
+		}
+		else
+		{
+			LOG_INFO("Auto-detected Flash name '%s'\n", target_device->name);
 		}
 
 		fespi_info->ctrl_base = target_device->ctrl_base;
