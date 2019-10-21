@@ -123,6 +123,7 @@ static bool swd_mode;
   during initialization.
 */
 static void oscan1_reset_online_activate(void);
+static void optional_rsu_reset(void);
 static void oscan1_mpsse_clock_data(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out_offset, uint8_t *in,
 				    unsigned in_offset, unsigned length, uint8_t mode);
 static void oscan1_mpsse_clock_tms_cs(struct mpsse_ctx *ctx, const uint8_t *out, unsigned out_offset, uint8_t *in,
@@ -665,6 +666,9 @@ static void ftdi_execute_command(struct jtag_command *cmd)
 {
 	switch (cmd->type) {
 		case JTAG_RESET:
+#if BUILD_FTDI_OSCAN1 == 1
+			optional_rsu_reset();
+#endif
 			ftdi_execute_reset(cmd);
 #if BUILD_FTDI_OSCAN1 == 1
 			oscan1_reset_online_activate(); /* put the target back into OSCAN1 mode */
@@ -674,6 +678,9 @@ static void ftdi_execute_command(struct jtag_command *cmd)
 			ftdi_execute_runtest(cmd);
 			break;
 		case JTAG_TLR_RESET:
+#if BUILD_FTDI_OSCAN1 == 1
+			optional_rsu_reset();
+#endif
 			ftdi_execute_statemove(cmd);
 #if BUILD_FTDI_OSCAN1 == 1
 			oscan1_reset_online_activate(); /* put the target back into OSCAN1 mode */
@@ -883,6 +890,70 @@ static void oscan1_set_tck_tms_tdi(struct signal *tck, char tckvalue, struct sig
 	ftdi_set_signal(tms, tmsvalue);
 	ftdi_set_signal(tdi, tdivalue);
 	ftdi_set_signal(tck, tckvalue);
+}
+
+static void optional_rsu_reset(void)
+{
+	struct signal *tck = find_signal_by_name("TCK");
+	struct signal *tms = find_signal_by_name("TMS");
+	struct signal *tdi = find_signal_by_name("TDI");
+	struct signal *tdo = find_signal_by_name("TDO");
+	uint16_t tdovalue;
+
+	static const struct {
+	  int8_t tck;
+	  int8_t tms;
+	} sequence[] = {
+
+	  {'0', '0'},
+
+	  /* Drive cJTAG escape sequence for TAP reset - 8 TMSC edges */
+	  /* TCK=1, TMS=0 (rising edge of TCK with TMSC still 0) */
+	  {'1', '0'},
+	  /* TCK=1, TMS=1 (drive rising TMSC edge) */
+	  {'1', '1'},
+	  /* TCK=1, TMS=0 (drive falling TMSC edge) */
+	  {'1', '0'},
+	  /* TCK=1, TMS=1 (drive rising TMSC edge) */
+	  {'1', '1'},
+	  /* TCK=1, TMS=0 (drive falling TMSC edge) */
+	  {'1', '0'},
+	  /* TCK=1, TMS=1 (drive rising TMSC edge) */
+	  {'1', '1'},
+	  /* TCK=1, TMS=0 (drive falling TMSC edge) */
+	  {'1', '0'},
+	  /* TCK=1, TMS=1 (drive rising TMSC edge) */
+	  {'1', '1'},
+	  /* TCK=1, TMS=0 (drive falling TMSC edge) */
+	  {'1', '0'},
+	  /* TCK=0, TMS=0 (falling edge TCK with TMSC still 0) */
+	  {'0', '0'}
+	};
+
+	if (oscan1_mode)
+		return;
+
+	if (!tck) {
+		LOG_ERROR("Can't run cJTAG reset escape sequences: TCK signal is not defined");
+		return;
+	}
+
+
+	if (!tms) {
+		LOG_ERROR("Can't run cJTAG reset escape sequences: TMS signal is not defined");
+		return;
+	}
+
+	if (!tdo) {
+		LOG_ERROR("Can't run cJTAG reset escape sequences: TDO signal is not defined");
+		return;
+	}
+
+	/* Send the sequence to the adapter */
+	for (size_t i = 0; i < sizeof(sequence)/sizeof(sequence[0]); i++)
+		oscan1_set_tck_tms_tdi(tck, sequence[i].tck, tms, sequence[i].tms, tdi, '0');
+
+	ftdi_get_signal(tdo, &tdovalue);  /* Just to force a flush */
 }
 
 static void oscan1_reset_online_activate(void)
