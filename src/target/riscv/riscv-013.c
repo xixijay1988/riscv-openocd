@@ -628,7 +628,6 @@ static int dmi_write(struct target *target, uint32_t address, uint32_t value)
 		if (address == DMI_DMCONTROL)
 		{
 			value |= DMI_DMCONTROL_TIMEOUTEN;
-			value |= DMI_DMCONTROL_SETRESETHALTREQ;
 		}
 	}
 	return dmi_op(target, NULL, NULL, DMI_OP_WRITE, address, value, false);
@@ -2997,16 +2996,24 @@ static int riscv013_on_halt(struct target *target)
 static bool riscv013_is_halted(struct target *target)
 {
 	uint32_t dmstatus;
+	uint32_t dmcontrol;
+	int hartid = riscv_current_hartid(target);
 	RISCV013_INFO(info);
 
 	if (dmstatus_read(target, &dmstatus, true) != ERROR_OK)
 		return false;
+	if(info->havedmtimeout == 1)
+	{
+		dmcontrol = DMI_DMCONTROL_DMACTIVE | DMI_DMCONTROL_SETRESETHALTREQ;
+		dmcontrol = set_hartsel(dmcontrol, hartid);
+		dmi_write(target, DMI_DMCONTROL, dmcontrol);
+	}
+
 	if (get_field(dmstatus, DMI_DMSTATUS_ANYUNAVAIL))
 		LOG_ERROR("Hart %d is unavailable.", riscv_current_hartid(target));
 	if (get_field(dmstatus, DMI_DMSTATUS_ANYNONEXISTENT))
 		LOG_ERROR("Hart %d doesn't exist.", riscv_current_hartid(target));
 	if (get_field(dmstatus, DMI_DMSTATUS_ANYHAVERESET)) {
-		int hartid = riscv_current_hartid(target);
 		LOG_INFO("Hart %d unexpectedly reset!", hartid);
 		if (info->havedmtimeout == 0)
 		{
@@ -3020,8 +3027,9 @@ static bool riscv013_is_halted(struct target *target)
 			LOG_INFO("Please execute 'continue' command to run your program.");
 		}
 		/* TODO: Can we make this more obvious to eg. a gdb user? */
-		uint32_t dmcontrol = DMI_DMCONTROL_DMACTIVE |
+		dmcontrol = DMI_DMCONTROL_DMACTIVE |
 			DMI_DMCONTROL_ACKHAVERESET;
+
 		dmcontrol = set_hartsel(dmcontrol, hartid);
 		/* If we had been halted when we reset, request another halt. If we
 		 * ended up running out of reset, then the user will (hopefully) get a
