@@ -3190,7 +3190,8 @@ static int riscv013_test_sba_config_reg(struct target *target,
 		return ERROR_FAIL;
 	}
 
-	uint32_t num_sbdata_regs = get_num_sbdata_regs(target);
+	uint32_t max_sbdata_regs = get_num_sbdata_regs(target);
+	uint32_t num_sbdata_regs;
 
 	uint32_t rd_buf[num_sbdata_regs];
 
@@ -3205,12 +3206,20 @@ static int riscv013_test_sba_config_reg(struct target *target,
 		dmi_write(target, DMI_SBCS, sbcs);
 
 		uint32_t compare_mask = (sbaccess == 0) ? 0xff : (sbaccess == 1) ? 0xffff : 0xffffffff;
+		num_sbdata_regs =	(sbaccess == 4)? 4:
+							(sbaccess == 3)? 2:
+							1;
+		if (num_sbdata_regs > max_sbdata_regs)
+			num_sbdata_regs = max_sbdata_regs;
 
 		for (uint32_t i = 0; i < num_words; i++) {
 			uint32_t addr = legal_address + (i << sbaccess);
-			uint32_t wr_data[num_sbdata_regs];
+			uint32_t wr_data[max_sbdata_regs];
 			for (uint32_t j = 0; j < num_sbdata_regs; j++)
+			{
 				wr_data[j] = test_patterns[j] + i;
+			}
+			//LOG_INFO("TEST: Write to address 0x%08x, with sbaccess = %d", addr, sbaccess);
 			write_memory_sba_simple(target, addr, wr_data, num_sbdata_regs, sbcs);
 		}
 
@@ -3219,8 +3228,8 @@ static int riscv013_test_sba_config_reg(struct target *target,
 			read_memory_sba_simple(target, addr, rd_buf, num_sbdata_regs, sbcs);
 			for (uint32_t j = 0; j < num_sbdata_regs; j++) {
 				if (((test_patterns[j]+i)&compare_mask) != (rd_buf[j]&compare_mask)) {
-					LOG_ERROR("System Bus Access Test 1: Error reading non-autoincremented address %x,"
-							"expected val = %x, read val = %x", addr, test_patterns[j]+i, rd_buf[j]);
+					LOG_ERROR("System Bus Access Test 1: Error reading non-autoincremented address 0x%x,"
+							"expected val = 0x%x, read val = 0x%x", addr, test_patterns[j]+i, rd_buf[j]);
 					test_passed = false;
 					tests_failed++;
 				}
