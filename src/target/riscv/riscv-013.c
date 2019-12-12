@@ -1980,6 +1980,11 @@ static int read_sbcs_nonbusy(struct target *target, uint32_t *sbcs)
 			return ERROR_FAIL;
 		if (!get_field(*sbcs, DMI_SBCS_SBBUSY))
 			return ERROR_OK;
+		if (get_field(*sbcs, DMI_SBCS_SBBUSYERROR)) {
+			LOG_ERROR("The transmission will try later because sbbusyerror is high (sbcs=0x%x).",
+					riscv_command_timeout_sec, *sbcs);
+			return ERROR_OK;
+		}
 		if (time(NULL) - start > riscv_command_timeout_sec) {
 			LOG_ERROR("Timed out after %ds waiting for sbbusy to go low (sbcs=0x%x). "
 					"Increase the timeout with riscv set_command_timeout_sec.",
@@ -1987,6 +1992,15 @@ static int read_sbcs_nonbusy(struct target *target, uint32_t *sbcs)
 			return ERROR_FAIL;
 		}
 	}
+}
+
+static int check_sbcs_status(struct target *target, uint32_t *sbcs)
+{
+	if (dmi_read(target, sbcs, DMI_SBCS) != ERROR_OK)
+		return ERROR_FAIL;
+	if(get_field(*sbcs, DMI_SBCS_SBBUSYERROR))
+		dmi_write(target, DMI_SBCS, DMI_SBCS_SBBUSYERROR);
+	return ERROR_OK;
 }
 
 static int read_memory_bus_v0(struct target *target, target_addr_t address,
@@ -1997,7 +2011,12 @@ static int read_memory_bus_v0(struct target *target, target_addr_t address,
 	uint8_t *t_buffer = buffer;
 	riscv_addr_t cur_addr = address;
 	riscv_addr_t fin_addr = address + (count * size);
-	uint32_t access = 0;
+	uint32_t access;
+
+	if (check_sbcs_status(target, &access) != ERROR_OK)
+		return ERROR_FAIL;
+
+	access = 0;
 
 	const int DMI_SBCS_SBSINGLEREAD_OFFSET = 20;
 	const uint32_t DMI_SBCS_SBSINGLEREAD = (0x1U << DMI_SBCS_SBSINGLEREAD_OFFSET);
@@ -2005,11 +2024,15 @@ static int read_memory_bus_v0(struct target *target, target_addr_t address,
 	const int DMI_SBCS_SBAUTOREAD_OFFSET = 15;
 	const uint32_t DMI_SBCS_SBAUTOREAD = (0x1U << DMI_SBCS_SBAUTOREAD_OFFSET);
 
+	if (check_sbcs_status(target, &access) != ERROR_OK)
+		return ERROR_FAIL;
+
 	/* ww favorise one off reading if there is an issue */
 	if (count == 1) {
 		for (uint32_t i = 0; i < count; i++) {
 			if (dmi_read(target, &access, DMI_SBCS) != ERROR_OK)
 				return ERROR_FAIL;
+
 			dmi_write(target, DMI_SBADDRESS0, cur_addr);
 			/* size/2 matching the bit access of the spec 0.13 */
 			access = set_field(access, DMI_SBCS_SBACCESS, size/2);
@@ -2075,9 +2098,13 @@ static int read_memory_bus_v1(struct target *target, target_addr_t address,
 	RISCV013_INFO(info);
 	target_addr_t next_address = address;
 	target_addr_t end_address = address + count * size;
+	uint32_t sbcs;
+
+	if (check_sbcs_status(target, &sbcs) != ERROR_OK)
+		return ERROR_FAIL;
 
 	while (next_address < end_address) {
-		uint32_t sbcs = set_field(0, DMI_SBCS_SBREADONADDR, 1);
+		sbcs = set_field(0, DMI_SBCS_SBREADONADDR, 1);
 		sbcs |= sb_sbaccess(size);
 		sbcs = set_field(sbcs, DMI_SBCS_SBAUTOINCREMENT, 1);
 		sbcs = set_field(sbcs, DMI_SBCS_SBREADONDATA, count > 1);
@@ -2471,6 +2498,9 @@ static int write_memory_bus_v0(struct target *target, target_addr_t address,
 	riscv_addr_t t_addr = 0;
 	const uint8_t *t_buffer = buffer + offset;
 
+	if (check_sbcs_status(target, &access) != ERROR_OK)
+		return ERROR_FAIL;
+
 	/* B.8 Writing Memory, single write check if we write in one go */
 	if (count == 1) { /* count is in bytes here */
 		/* check the size */
@@ -2550,7 +2580,11 @@ static int write_memory_bus_v1(struct target *target, target_addr_t address,
 		uint32_t size, uint32_t count, const uint8_t *buffer)
 {
 	RISCV013_INFO(info);
-	uint32_t sbcs = sb_sbaccess(size);
+	uint32_t sbcs;
+	if (check_sbcs_status(target, &sbcs) != ERROR_OK)
+		return ERROR_FAIL;
+
+	sbcs = sb_sbaccess(size);
 	sbcs = set_field(sbcs, DMI_SBCS_SBAUTOINCREMENT, 1);
 	dmi_write(target, DMI_SBCS, sbcs);
 
