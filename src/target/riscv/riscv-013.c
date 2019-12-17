@@ -1974,18 +1974,35 @@ static int sb_write_address(struct target *target, target_addr_t address)
 
 static int read_sbcs_nonbusy(struct target *target, uint32_t *sbcs)
 {
+	uint32_t dmstatus;
 	time_t start = time(NULL);
 	while (1) {
 		if (dmi_read(target, sbcs, DMI_SBCS) != ERROR_OK)
 			return ERROR_FAIL;
 		if (!get_field(*sbcs, DMI_SBCS_SBBUSY))
 			return ERROR_OK;
+#if 0
 		if (get_field(*sbcs, DMI_SBCS_SBBUSYERROR)) {
-			LOG_ERROR("The transmission will try later because sbbusyerror is high (sbcs=0x%x).",
-					riscv_command_timeout_sec, *sbcs);
-			return ERROR_OK;
+			LOG_ERROR("The transmission end because sbbusyerror is high (sbcs=0x%x).",
+					*sbcs);
+			dmi_write(target, DMI_SBCS, DMI_SBCS_SBBUSYERROR);
+			return ERROR_FAIL;
+		}
+#endif
+		if (dmstatus_read(target, &dmstatus, true) == ERROR_OK) {
+			if(get_field(dmstatus, DMI_DMSTATUS_ANYHAVERESET)) {
+				LOG_ERROR("Please don't reset core when accessing memory!");
+				dmi_write(target, DMI_DMCONTROL, 0);
+				dmi_write(target, DMI_DMCONTROL, DMI_DMCONTROL_DMACTIVE); /* Reset DM logic */
+				return ERROR_FAIL;
+			}
+		}
+		else {
+			return ERROR_FAIL;
 		}
 		if (time(NULL) - start > riscv_command_timeout_sec) {
+			dmi_write(target, DMI_DMCONTROL, 0);
+			dmi_write(target, DMI_DMCONTROL, DMI_DMCONTROL_DMACTIVE); /* Reset DM logic */
 			LOG_ERROR("Timed out after %ds waiting for sbbusy to go low (sbcs=0x%x). "
 					"Increase the timeout with riscv set_command_timeout_sec.",
 					riscv_command_timeout_sec, *sbcs);
@@ -1996,10 +2013,12 @@ static int read_sbcs_nonbusy(struct target *target, uint32_t *sbcs)
 
 static int check_sbcs_status(struct target *target, uint32_t *sbcs)
 {
+#if 0
 	if (dmi_read(target, sbcs, DMI_SBCS) != ERROR_OK)
 		return ERROR_FAIL;
 	if(get_field(*sbcs, DMI_SBCS_SBBUSYERROR))
 		dmi_write(target, DMI_SBCS, DMI_SBCS_SBBUSYERROR);
+#endif
 	return ERROR_OK;
 }
 
@@ -2493,7 +2512,7 @@ static int write_memory_bus_v0(struct target *target, target_addr_t address,
 			TARGET_PRIxADDR, size, count, address);
 	dmi_write(target, DMI_SBADDRESS0, address);
 	int64_t value = 0;
-	int64_t access = 0;
+	uint32_t access = 0;
 	riscv_addr_t offset = 0;
 	riscv_addr_t t_addr = 0;
 	const uint8_t *t_buffer = buffer + offset;
