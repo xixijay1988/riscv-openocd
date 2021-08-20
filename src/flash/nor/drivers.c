@@ -60,6 +60,7 @@ extern const struct flash_driver niietcm4_flash;
 extern const struct flash_driver nrf5_flash;
 extern const struct flash_driver nrf51_flash;
 extern const struct flash_driver numicro_flash;
+extern const struct flash_driver nuspi_flash;
 extern const struct flash_driver ocl_flash;
 extern const struct flash_driver pic32mx_flash;
 extern const struct flash_driver psoc4_flash;
@@ -134,6 +135,7 @@ static const struct flash_driver * const flash_drivers[] = {
 	&nrf5_flash,
 	&nrf51_flash,
 	&numicro_flash,
+    &nuspi_flash,
 	&ocl_flash,
 	&pic32mx_flash,
 	&psoc4_flash,
@@ -169,8 +171,12 @@ static const struct flash_driver * const flash_drivers[] = {
 
 const struct flash_driver *flash_driver_find_by_name(const char *name)
 {
+	char *flash_name = name;
+	if (strcmp(flash_name, "fespi") == 0) {
+		flash_name = "nuspi";
+	}
 	for (unsigned i = 0; flash_drivers[i]; i++) {
-		if (strcmp(name, flash_drivers[i]->name) == 0)
+		if (strcmp(flash_name, flash_drivers[i]->name) == 0)
 			return flash_drivers[i];
 	}
 	return NULL;
