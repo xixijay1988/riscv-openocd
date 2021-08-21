@@ -1,6 +1,6 @@
 /***************************************************************************
  *   Copyright (C) 2010 by Antonio Borneo <borneo.antonio@gmail.com>       *
- *   Modified by Megan Wachs <megan@sifive.com> from the original stmsmi.c *
+ *   Modified by Yanwen Wang <wangyanwen@nucleisys.com> based on fespi.c   *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -16,8 +16,8 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
-/* The Freedom E SPI controller is a SPI bus controller
- * specifically designed for SPI Flash Memories on Freedom E platforms.
+/* The Nuclei SPI controller is a SPI bus controller
+ * specifically designed for SPI Flash Memories on Nuclei RISC-V platforms.
  *
  * Two working modes are available:
  * - SW mode: the SPI is controlled by SW. Any custom commands can be sent
@@ -937,10 +937,10 @@ static int nuspi_probe(struct flash_bank *bank)
 
 	if (target_device->name) {
 		LOG_INFO("Valid NUSPI on device %s at address " TARGET_ADDR_FMT
-			" with ctrl at " TARGET_ADDR_FMT, target_device->name, nuspi_info->ctrl_base, bank->base);
+			" with spictrl regbase at " TARGET_ADDR_FMT, target_device->name, bank->base, nuspi_info->ctrl_base);
 	} else {
 		LOG_INFO("Valid NUSPI on unknown device at address " TARGET_ADDR_FMT
-			" with ctrl at " TARGET_ADDR_FMT, nuspi_info->ctrl_base, bank->base);
+			" with spictrl regbase at " TARGET_ADDR_FMT, bank->base, nuspi_info->ctrl_base);
 	}
 
 	if (nuspi_read_reg(bank, &nuspi_info->version, NUSPI_REG_VERSION) != ERROR_OK)
