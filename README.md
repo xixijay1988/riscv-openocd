@@ -1,7 +1,7 @@
 # Notice
 
 If you are looking for how to build Nuclei OpenOCD,
-please follow this [guidance](https://github.com/riscv-mcu/openocd-xpack/blob/xpack-nuclei-next/README-BUILD-Nuclei.md)
+please follow this [guidance](https://github.com/riscv-mcu/openocd-xpack/blob/xpack_nuclei_next/README-BUILD-Nuclei.md)
 
 About how to use openocd, please check http://openocd.org/documentation/
 
